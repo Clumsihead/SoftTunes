@@ -17,6 +17,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.PlaylistPlay
+import androidx.compose.material.icons.automirrored.filled.Sort
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ContentPaste
 import androidx.compose.material.icons.filled.Delete
@@ -39,6 +40,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.TextStyle
@@ -92,14 +94,15 @@ private val spines = listOf(
 /** Soft "book-spine" tile standing in for album art. */
 @Composable
 fun Cover(seed: String, size: Dp) {
-    val color = spines[(seed.hashCode() and 0x7fffffff) % spines.size]
+    val color = remember(seed) { spines[(seed.hashCode() and 0x7fffffff) % spines.size] }
+    val letter = remember(seed) { seed.firstOrNull()?.uppercase() ?: "♪" }
     Box(
         Modifier.size(size).clip(RoundedCornerShape(size / 4)).background(color),
         contentAlignment = Alignment.Center,
     ) {
         Text(
-            seed.firstOrNull()?.uppercase() ?: "♪",
-            style = TextStyle(fontFamily = FontFamily.Serif, fontSize = (size.value * 0.42f).sp),
+            letter,
+            fontFamily = FontFamily.Serif, fontSize = (size.value * 0.42f).sp,
             color = Color(0xFF5A4A44).copy(alpha = 0.55f),
         )
     }
@@ -107,7 +110,8 @@ fun Cover(seed: String, size: Dp) {
 
 private fun fmt(ms: Long): String {
     val s = (ms / 1000).coerceAtLeast(0)
-    return "%d:%02d".format(s / 60, s % 60)
+    val sec = s % 60
+    return "${s / 60}:${if (sec < 10) "0" else ""}$sec"
 }
 
 private val lossless = setOf("FLAC", "WAV", "ALAC", "AIF", "AIFF")
@@ -180,59 +184,103 @@ private fun ScreenHeader(title: String, subtitle: String) {
 // ------------------------------------------------------------------ library
 @Composable
 fun LibraryScreen(vm: AppViewModel, onScan: () -> Unit) {
-    val songs by vm.songs.collectAsState()
+    val total by vm.allSongs.collectAsState()
+    val shown by vm.songs.collectAsState()
     val playlists by vm.playlists.collectAsState()
     val scanning by vm.scanning.collectAsState()
+    val sort by vm.sort.collectAsState()
     var query by remember { mutableStateOf("") }
+    var sortMenu by remember { mutableStateOf(false) }
+    var target by remember { mutableStateOf<Song?>(null) }
     val folder = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { it?.let(vm::addFolder) }
-    val shown = remember(songs, query) {
-        if (query.isBlank()) songs
-        else songs.filter { listOf(it.title, it.artist, it.album).any { s -> s.contains(query, ignoreCase = true) } }
+    val onPlay = remember(shown) { { i: Int -> vm.play(shown, i) } }
+    val onMore = remember { { s: Song -> target = s } }
+
+    LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 12.dp)) {
+        item(key = "header") {
+            Column {
+                ScreenHeader("Your Library", "${total.size} songs on this device")
+                Row(Modifier.padding(horizontal = 20.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    FilledTonalButton(onClick = onScan) {
+                        Icon(Icons.Filled.Refresh, null, Modifier.size(18.dp)); Spacer(Modifier.width(6.dp)); Text("Scan device")
+                    }
+                    OutlinedButton(onClick = { folder.launch(null) }) {
+                        Icon(Icons.Filled.FolderOpen, null, Modifier.size(18.dp)); Spacer(Modifier.width(6.dp)); Text("Add folder")
+                    }
+                }
+                OutlinedTextField(
+                    value = query, onValueChange = { query = it; vm.setQuery(it) }, singleLine = true,
+                    placeholder = { Text("Search title, artist, album") },
+                    shape = RoundedCornerShape(16.dp),
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 12.dp),
+                )
+                Box(Modifier.padding(horizontal = 20.dp)) {
+                    AssistChip(
+                        onClick = { sortMenu = true },
+                        label = { Text("Sort: ${sort.label}") },
+                        leadingIcon = { Icon(Icons.AutoMirrored.Filled.Sort, null, Modifier.size(18.dp)) },
+                    )
+                    DropdownMenu(expanded = sortMenu, onDismissRequest = { sortMenu = false }) {
+                        SortOption.entries.forEach { o ->
+                            DropdownMenuItem(
+                                text = {
+                                    Text(
+                                        (if (o == sort) "✓  " else "     ") + o.label,
+                                        fontWeight = if (o == sort) FontWeight.SemiBold else FontWeight.Normal,
+                                    )
+                                },
+                                onClick = { vm.setSort(o); sortMenu = false },
+                            )
+                        }
+                    }
+                }
+                Spacer(Modifier.height(8.dp))
+                if (scanning) LinearProgressIndicator(Modifier.fillMaxWidth().padding(horizontal = 20.dp))
+                if (shown.isEmpty() && !scanning) {
+                    Text(
+                        "No music found.\nTap “Scan device” or pick a folder.",
+                        Modifier.fillMaxWidth().padding(40.dp), textAlign = TextAlign.Center,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+        }
+        itemsIndexed(shown, key = { _, s -> s.uri }, contentType = { _, _ -> "song" }) { i, s ->
+            SongRow(s, i, onPlay, onMore, Icons.Filled.MoreVert, "More")
+        }
     }
 
-    Column(Modifier.fillMaxSize()) {
-        ScreenHeader("Your Library", "${songs.size} songs on this device")
-        Row(Modifier.padding(horizontal = 20.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            FilledTonalButton(onClick = onScan) {
-                Icon(Icons.Filled.Refresh, null, Modifier.size(18.dp)); Spacer(Modifier.width(6.dp)); Text("Scan device")
-            }
-            OutlinedButton(onClick = { folder.launch(null) }) {
-                Icon(Icons.Filled.FolderOpen, null, Modifier.size(18.dp)); Spacer(Modifier.width(6.dp)); Text("Add folder")
-            }
-        }
-        OutlinedTextField(
-            value = query, onValueChange = { query = it }, singleLine = true,
-            placeholder = { Text("Search title, artist, album") },
-            shape = RoundedCornerShape(16.dp),
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 12.dp),
+    target?.let { song ->
+        AlertDialog(
+            onDismissRequest = { target = null },
+            title = { Text("Add to playlist") },
+            text = {
+                if (playlists.isEmpty()) Text("Create a playlist first in the Playlists tab.")
+                else Column {
+                    playlists.forEach { pl ->
+                        TextButton(onClick = { vm.addToPlaylist(pl.id, song.uri); target = null }) { Text(pl.name) }
+                    }
+                }
+            },
+            confirmButton = { TextButton(onClick = { target = null }) { Text("Cancel") } },
         )
-        if (scanning) LinearProgressIndicator(Modifier.fillMaxWidth().padding(horizontal = 20.dp))
-        if (shown.isEmpty() && !scanning) {
-            Text(
-                "No music found yet.\nTap “Scan device” or pick a folder.",
-                Modifier.fillMaxWidth().padding(40.dp), textAlign = TextAlign.Center,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
-        LazyColumn(contentPadding = PaddingValues(bottom = 12.dp)) {
-            itemsIndexed(shown, key = { _, s -> s.uri }) { i, s ->
-                SongRow(s, playlists, onPlay = { vm.play(shown, i) }, onAdd = { vm.addToPlaylist(it, s.uri) })
-            }
-        }
     }
 }
 
+/** Kept deliberately light: no per-row menus or state, so 400+ rows scroll cheaply. */
 @Composable
 private fun SongRow(
     song: Song,
-    playlists: List<Playlist>,
-    onPlay: () -> Unit,
-    onAdd: ((Long) -> Unit)? = null,
-    onRemove: (() -> Unit)? = null,
+    index: Int,
+    onPlay: (Int) -> Unit,
+    onAction: (Song) -> Unit,
+    actionIcon: ImageVector,
+    actionLabel: String,
 ) {
-    var menu by remember { mutableStateOf(false) }
+    val duration = remember(song.durationMs) { fmt(song.durationMs) }
+    val sub = remember(song.artist, song.album) { "${song.artist} · ${song.album}" }
     Row(
-        Modifier.fillMaxWidth().clickable(onClick = onPlay).padding(horizontal = 20.dp, vertical = 8.dp),
+        Modifier.fillMaxWidth().clickable { onPlay(index) }.padding(start = 20.dp, top = 8.dp, bottom = 8.dp, end = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Cover(song.title, 48.dp)
@@ -240,36 +288,22 @@ private fun SongRow(
         Column(Modifier.weight(1f)) {
             Text(song.title, maxLines = 1, overflow = TextOverflow.Ellipsis, fontWeight = FontWeight.Medium)
             Text(
-                "${song.artist} · ${song.album}", maxLines = 1, overflow = TextOverflow.Ellipsis,
+                sub, maxLines = 1, overflow = TextOverflow.Ellipsis,
                 style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
         if (song.format.isNotBlank()) {
-            val hifi = song.format in lossless
-            Surface(
-                shape = RoundedCornerShape(8.dp),
-                color = if (hifi) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.surfaceVariant,
-            ) {
-                Text(song.format, Modifier.padding(horizontal = 6.dp, vertical = 2.dp), style = MaterialTheme.typography.labelSmall)
-            }
+            val bg = if (song.format in lossless) MaterialTheme.colorScheme.secondaryContainer
+            else MaterialTheme.colorScheme.surfaceVariant
+            Text(
+                song.format,
+                Modifier.clip(RoundedCornerShape(8.dp)).background(bg).padding(horizontal = 6.dp, vertical = 2.dp),
+                style = MaterialTheme.typography.labelSmall,
+            )
         }
-        Text(fmt(song.durationMs), Modifier.padding(start = 8.dp), style = MaterialTheme.typography.bodySmall,
+        Text(duration, Modifier.padding(start = 8.dp), style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant)
-        Box {
-            IconButton(onClick = { menu = true }) { Icon(Icons.Filled.MoreVert, "More") }
-            DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
-                if (onRemove != null) {
-                    DropdownMenuItem(text = { Text("Remove from playlist") }, onClick = { onRemove(); menu = false })
-                }
-                if (onAdd != null) {
-                    if (playlists.isEmpty()) {
-                        DropdownMenuItem(text = { Text("Create a playlist first") }, onClick = { menu = false })
-                    } else playlists.forEach { pl ->
-                        DropdownMenuItem(text = { Text("Add to ${pl.name}") }, onClick = { onAdd(pl.id); menu = false })
-                    }
-                }
-            }
-        }
+        IconButton(onClick = { onAction(song) }) { Icon(actionIcon, actionLabel) }
     }
 }
 
@@ -341,7 +375,7 @@ private fun PlaylistDetail(vm: AppViewModel, pl: Playlist, onBack: () -> Unit) {
         }
         LazyColumn {
             itemsIndexed(songs, key = { _, s -> s.uri }) { i, s ->
-                SongRow(s, emptyList(), onPlay = { vm.play(songs, i) }, onRemove = { vm.removeFromPlaylist(pl.id, s.uri) })
+                SongRow(s, i, { idx -> vm.play(songs, idx) }, { vm.removeFromPlaylist(pl.id, it.uri) }, Icons.Filled.Delete, "Remove")
             }
         }
     }
@@ -371,8 +405,9 @@ private fun MiniPlayer(vm: AppViewModel, ui: PlayerUi, onOpen: () -> Unit) {
 
 @Composable
 private fun NowPlaying(vm: AppViewModel, ui: PlayerUi, onClose: () -> Unit) {
+    val pos by vm.position.collectAsState()
     var drag by remember { mutableStateOf<Float?>(null) }
-    val frac = if (ui.durationMs > 0) ui.positionMs.toFloat() / ui.durationMs else 0f
+    val frac = if (ui.durationMs > 0) pos.toFloat() / ui.durationMs else 0f
     Column(
         Modifier.fillMaxSize().padding(24.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
@@ -392,7 +427,7 @@ private fun NowPlaying(vm: AppViewModel, ui: PlayerUi, onClose: () -> Unit) {
             onValueChangeFinished = { drag?.let { vm.seekTo((it * ui.durationMs).toLong()) }; drag = null },
         )
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-            Text(fmt(ui.positionMs), style = MaterialTheme.typography.bodySmall)
+            Text(fmt(pos), style = MaterialTheme.typography.bodySmall)
             Text(fmt(ui.durationMs), style = MaterialTheme.typography.bodySmall)
         }
         Spacer(Modifier.height(12.dp))

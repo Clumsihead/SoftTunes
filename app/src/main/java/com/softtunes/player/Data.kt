@@ -3,6 +3,8 @@ package com.softtunes.player
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
 import androidx.room.*
+import androidx.room.migration.Migration
+import androidx.sqlite.db.SupportSQLiteDatabase
 import kotlinx.coroutines.flow.Flow
 
 @Entity(tableName = "songs")
@@ -13,6 +15,7 @@ data class Song(
     val album: String,
     val durationMs: Long,
     val format: String,
+    val dateAdded: Long = 0,
 )
 
 @Entity(tableName = "playlists")
@@ -63,7 +66,7 @@ interface LibraryDao {
     fun playlistSongs(id: Long): Flow<List<Song>>
 }
 
-@Database(entities = [Song::class, Playlist::class, PlaylistEntry::class], version = 1, exportSchema = false)
+@Database(entities = [Song::class, Playlist::class, PlaylistEntry::class], version = 2, exportSchema = false)
 abstract class AppDb : RoomDatabase() {
     abstract fun dao(): LibraryDao
 }
@@ -75,3 +78,35 @@ fun Song.toMediaItem(): MediaItem = MediaItem.Builder()
         MediaMetadata.Builder().setTitle(title).setArtist(artist).setAlbumTitle(album).build()
     )
     .build()
+
+/** v1 -> v2 adds "date added" without touching playlists. */
+val MIGRATION_1_2 = object : Migration(1, 2) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE songs ADD COLUMN dateAdded INTEGER NOT NULL DEFAULT 0")
+    }
+}
+
+enum class SortOption(val label: String) {
+    NAME_ASC("Name (A–Z)"), NAME_DESC("Name (Z–A)"),
+    ARTIST_ASC("Artist (A–Z)"), ARTIST_DESC("Artist (Z–A)"),
+    ALBUM_ASC("Album (A–Z)"), ALBUM_DESC("Album (Z–A)"),
+    DATE_DESC("Date added (newest first)"), DATE_ASC("Date added (oldest first)"),
+}
+
+private val ci: Comparator<String> = String.CASE_INSENSITIVE_ORDER
+
+fun sortSongs(list: List<Song>, o: SortOption): List<Song> {
+    val byTitle = compareBy<Song, String>(ci) { it.title }
+    val byArtist = compareBy<Song, String>(ci) { it.artist }
+    val byAlbum = compareBy<Song, String>(ci) { it.album }
+    return when (o) {
+        SortOption.NAME_ASC -> list.sortedWith(byTitle)
+        SortOption.NAME_DESC -> list.sortedWith(byTitle.reversed())
+        SortOption.ARTIST_ASC -> list.sortedWith(byArtist.then(byTitle))
+        SortOption.ARTIST_DESC -> list.sortedWith(byArtist.reversed().then(byTitle))
+        SortOption.ALBUM_ASC -> list.sortedWith(byAlbum.then(byTitle))
+        SortOption.ALBUM_DESC -> list.sortedWith(byAlbum.reversed().then(byTitle))
+        SortOption.DATE_DESC -> list.sortedWith(compareByDescending<Song> { it.dateAdded }.then(byTitle))
+        SortOption.DATE_ASC -> list.sortedWith(compareBy<Song> { it.dateAdded }.then(byTitle))
+    }
+}

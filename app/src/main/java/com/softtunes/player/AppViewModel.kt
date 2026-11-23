@@ -14,6 +14,7 @@ import androidx.media3.common.Player
 import androidx.media3.session.MediaController
 import androidx.media3.session.SessionToken
 import androidx.room.Room
+import androidx.room.withTransaction
 import com.chaquo.python.Python
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -26,7 +27,6 @@ data class PlayerUi(
     val title: String = "",
     val artist: String = "",
     val isPlaying: Boolean = false,
-    val positionMs: Long = 0,
     val durationMs: Long = 0,
     val shuffle: Boolean = false,
     val repeat: Int = Player.REPEAT_MODE_OFF,
@@ -47,15 +47,33 @@ interface ProgressListener {
 
 class AppViewModel(app: Application) : AndroidViewModel(app) {
     private val ctx get() = getApplication<Application>()
-    private val dao = Room.databaseBuilder(app, AppDb::class.java, "softtunes.db").build().dao()
+    private val db = Room.databaseBuilder(app, AppDb::class.java, "softtunes.db")
+        .addMigrations(MIGRATION_1_2).build()
+    private val dao = db.dao()
     private val prefs = app.getSharedPreferences("softtunes", 0)
 
-    val songs = dao.songs().stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
+    val allSongs = dao.songs().stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
+
+    val query = MutableStateFlow("")
+    val sort = MutableStateFlow(
+        runCatching { SortOption.valueOf(prefs.getString("sort", null) ?: "") }.getOrDefault(SortOption.NAME_ASC)
+    )
+    fun setQuery(q: String) { query.value = q }
+    fun setSort(o: SortOption) { sort.value = o; prefs.edit().putString("sort", o.name).apply() }
+
+    /** Filtered + sorted list, computed off the main thread so scrolling never waits on it. */
+    val songs: StateFlow<List<Song>> = combine(allSongs, query, sort) { list, q, s ->
+        val filtered = if (q.isBlank()) list else list.filter {
+            it.title.contains(q, true) || it.artist.contains(q, true) || it.album.contains(q, true)
+        }
+        sortSongs(filtered, s)
+    }.flowOn(Dispatchers.Default).stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
     val playlists = dao.playlists().stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
     fun playlistSongs(id: Long) = dao.playlistSongs(id)
 
     val scanning = MutableStateFlow(false)
     val player = MutableStateFlow(PlayerUi())
+    val position = MutableStateFlow(0L)   // separate so 2x/sec ticks only recompose the seek bar
     val conv = MutableStateFlow(ConvUi())
 
     private var controller: MediaController? = null
@@ -77,9 +95,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             while (true) {
                 delay(500)
                 val c = controller ?: continue
-                if (c.isPlaying) player.update {
-                    it.copy(positionMs = c.currentPosition, durationMs = c.duration.coerceAtLeast(0))
-                }
+                if (c.isPlaying) position.value = c.currentPosition
             }
         }
     }
@@ -87,12 +103,12 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     private fun refresh() {
         val c = controller ?: return
         val md: MediaMetadata = c.mediaMetadata
+        position.value = c.currentPosition
         player.value = PlayerUi(
             hasItem = c.mediaItemCount > 0,
             title = md.title?.toString().orEmpty(),
             artist = md.artist?.toString().orEmpty(),
             isPlaying = c.isPlaying,
-            positionMs = c.currentPosition,
             durationMs = c.duration.coerceAtLeast(0),
             shuffle = c.shuffleModeEnabled,
             repeat = c.repeatMode,
@@ -136,8 +152,10 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             try {
                 val all = Scanner.mediaStore(ctx).toMutableList()
                 folders().forEach { all += Scanner.tree(ctx, Uri.parse(it)) }
-                dao.clearSongs()
-                dao.insertSongs(all.distinctBy { it.uri })
+                db.withTransaction {   // one atomic swap -> the list updates once, no empty flash
+                    dao.clearSongs()
+                    dao.insertSongs(all.distinctBy { it.uri })
+                }
             } finally { scanning.value = false }
         }
     }

@@ -22,6 +22,7 @@ object Scanner {
         val proj = arrayOf(
             MediaStore.Audio.Media._ID, MediaStore.Audio.Media.TITLE, MediaStore.Audio.Media.ARTIST,
             MediaStore.Audio.Media.ALBUM, MediaStore.Audio.Media.DURATION, MediaStore.Audio.Media.DISPLAY_NAME,
+            MediaStore.Audio.Media.DATE_ADDED,
         )
         ctx.contentResolver.query(
             coll, proj, "${MediaStore.Audio.Media.IS_MUSIC} != 0", null, null
@@ -32,6 +33,7 @@ object Scanner {
             val iAlbum = c.getColumnIndexOrThrow(MediaStore.Audio.Media.ALBUM)
             val iDur = c.getColumnIndexOrThrow(MediaStore.Audio.Media.DURATION)
             val iName = c.getColumnIndexOrThrow(MediaStore.Audio.Media.DISPLAY_NAME)
+            val iDate = c.getColumnIndexOrThrow(MediaStore.Audio.Media.DATE_ADDED)
             while (c.moveToNext()) {
                 val name = c.getString(iName) ?: ""
                 out += Song(
@@ -41,6 +43,7 @@ object Scanner {
                     album = clean(c.getString(iAlbum), "Unknown album"),
                     durationMs = c.getLong(iDur),
                     format = name.substringAfterLast('.', "").uppercase(),
+                    dateAdded = c.getLong(iDate) * 1000,
                 )
             }
         }
@@ -68,6 +71,7 @@ object Scanner {
                         album = clean(mmr.extractMetadata(MediaMetadataRetriever.METADATA_KEY_ALBUM), "Unknown album"),
                         durationMs = mmr.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)?.toLongOrNull() ?: 0L,
                         format = ext.uppercase(),
+                        dateAdded = f.lastModified(),
                     )
                 } catch (_: Exception) { /* unreadable file: skip */ }
             }
