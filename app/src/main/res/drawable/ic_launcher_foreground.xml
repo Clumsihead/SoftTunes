@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp" android:height="108dp"
+    android:viewportWidth="108" android:viewportHeight="108">
+    <!-- record sleeve peeking out behind the disc -->
+    <path android:fillColor="#8FA89A" android:pathData="M22,34 Q22,30 26,30 L70,30 L70,78 Q70,82 66,82 L26,82 Q22,82 22,78 Z"/>
+    <!-- disc -->
+    <path android:fillColor="#54454A" android:pathData="M31,50 a27,27 0 1,0 54,0 a27,27 0 1,0 -54,0 Z"/>
+    <!-- grooves -->
+    <path android:strokeColor="#FFFFFF" android:strokeAlpha="0.14" android:strokeWidth="0.6" android:pathData="M34.5,50 a23.5,23.5 0 1,0 47.0,0 a23.5,23.5 0 1,0 -47.0,0 Z"/>
+    <path android:strokeColor="#FFFFFF" android:strokeAlpha="0.14" android:strokeWidth="0.6" android:pathData="M38,50 a20,20 0 1,0 40,0 a20,20 0 1,0 -40,0 Z"/>
+    <path android:strokeColor="#FFFFFF" android:strokeAlpha="0.14" android:strokeWidth="0.6" android:pathData="M41.5,50 a16.5,16.5 0 1,0 33.0,0 a16.5,16.5 0 1,0 -33.0,0 Z"/>
+    <!-- sheen -->
+    <path android:fillColor="#FFFFFF" android:fillAlpha="0.10" android:pathData="M58,50 L32.6,40.8 A27,27 0 0,1 40.6,29.3 Z"/>
+    <path android:fillColor="#FFFFFF" android:fillAlpha="0.10" android:pathData="M58,50 L83.4,59.2 A27,27 0 0,1 75.4,70.7 Z"/>
+    <!-- label -->
+    <path android:fillColor="#C98B8B" android:pathData="M47.5,50 a10.5,10.5 0 1,0 21.0,0 a10.5,10.5 0 1,0 -21.0,0 Z"/>
+    <path android:strokeColor="#FBEFE9" android:strokeAlpha="0.7" android:strokeWidth="0.7" android:pathData="M50,50 a8,8 0 1,0 16,0 a8,8 0 1,0 -16,0 Z"/>
+    <!-- spindle hole -->
+    <path android:fillColor="#FBEFE9" android:pathData="M56.2,50 a1.8,1.8 0 1,0 3.6,0 a1.8,1.8 0 1,0 -3.6,0 Z"/>
+</vector>

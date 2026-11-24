@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp" android:height="108dp"
+    android:viewportWidth="108" android:viewportHeight="108">
+    <!-- disc with a ring cut out around the label -->
+    <path android:fillColor="#000000" android:fillType="evenOdd" android:pathData="M31,50 a27,27 0 1,0 54,0 a27,27 0 1,0 -54,0 Z M45,50 a13,13 0 1,0 26,0 a13,13 0 1,0 -26,0 Z"/>
+    <!-- label with a spindle hole -->
+    <path android:fillColor="#000000" android:fillType="evenOdd" android:pathData="M48,50 a10,10 0 1,0 20,0 a10,10 0 1,0 -20,0 Z M56,50 a2,2 0 1,0 4,0 a2,2 0 1,0 -4,0 Z"/>
+</vector>
