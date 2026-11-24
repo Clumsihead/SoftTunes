@@ -5,7 +5,9 @@ import android.content.ComponentName
 import android.content.ContentValues
 import android.content.Intent
 import android.net.Uri
+import android.os.Process
 import android.provider.MediaStore
+import androidx.compose.runtime.Immutable
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
@@ -16,12 +18,14 @@ import androidx.media3.session.SessionToken
 import androidx.room.Room
 import androidx.room.withTransaction
 import com.chaquo.python.Python
+import com.chaquo.python.android.AndroidPlatform
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import java.io.File
 
+@Immutable
 data class PlayerUi(
     val hasItem: Boolean = false,
     val title: String = "",
@@ -32,6 +36,7 @@ data class PlayerUi(
     val repeat: Int = Player.REPEAT_MODE_OFF,
 )
 
+@Immutable
 data class ConvUi(
     val running: Boolean = false,
     val percent: Float = 0f,
@@ -150,13 +155,26 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch(Dispatchers.IO) {
             scanning.value = true
             try {
-                val all = Scanner.mediaStore(ctx).toMutableList()
-                folders().forEach { all += Scanner.tree(ctx, Uri.parse(it)) }
+                val all = scanAll()
                 db.withTransaction {   // one atomic swap -> the list updates once, no empty flash
                     dao.clearSongs()
                     dao.insertSongs(all.distinctBy { it.uri })
                 }
             } finally { scanning.value = false }
+        }
+    }
+
+    /** Blocking scan at background priority so it never steals CPU from scrolling. */
+    private fun scanAll(): List<Song> {
+        val prev = Process.getThreadPriority(0)
+        Process.setThreadPriority(Process.THREAD_PRIORITY_BACKGROUND)
+        try {
+            val known = allSongs.value.associateBy { it.uri }
+            val all = Scanner.mediaStore(ctx).toMutableList()
+            folders().forEach { all += Scanner.tree(ctx, Uri.parse(it), known) }
+            return all
+        } finally {
+            Process.setThreadPriority(prev)
         }
     }
 
@@ -185,7 +203,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                         conv.update { it.copy(percent = (percent / 100.0).toFloat().coerceIn(0f, 1f), status = status) }
                     }
                 }
-                val path = Python.getInstance().getModule("converter")
+                val path = run { if (!Python.isStarted()) Python.start(AndroidPlatform(ctx)); Python.getInstance() }
+                    .getModule("converter")
                     .callAttr("convert", url.trim(), work.absolutePath, kbps, cb).toString()
                 val name = saveToMusic(File(path))
                 conv.value = ConvUi(percent = 1f, status = "Saved to Music/SoftTunes", resultName = name)

@@ -86,6 +86,8 @@ fun SoftTunesTheme(content: @Composable () -> Unit) {
     )
 }
 
+private val CoverInk = Color(0x8C5A4A44)
+
 private val spines = listOf(
     Color(0xFFF3D5D0), Color(0xFFDDE8E0), Color(0xFFE6DDF0),
     Color(0xFFF4E6C8), Color(0xFFD6E4EC), Color(0xFFEBD9CF),
@@ -97,13 +99,13 @@ fun Cover(seed: String, size: Dp) {
     val color = remember(seed) { spines[(seed.hashCode() and 0x7fffffff) % spines.size] }
     val letter = remember(seed) { seed.firstOrNull()?.uppercase() ?: "♪" }
     Box(
-        Modifier.size(size).clip(RoundedCornerShape(size / 4)).background(color),
+        Modifier.size(size).background(color, RoundedCornerShape(size / 4)),
         contentAlignment = Alignment.Center,
     ) {
         Text(
             letter,
             fontFamily = FontFamily.Serif, fontSize = (size.value * 0.42f).sp,
-            color = Color(0xFF5A4A44).copy(alpha = 0.55f),
+            color = CoverInk,
         )
     }
 }
@@ -297,7 +299,7 @@ private fun SongRow(
             else MaterialTheme.colorScheme.surfaceVariant
             Text(
                 song.format,
-                Modifier.clip(RoundedCornerShape(8.dp)).background(bg).padding(horizontal = 6.dp, vertical = 2.dp),
+                Modifier.background(bg, RoundedCornerShape(8.dp)).padding(horizontal = 6.dp, vertical = 2.dp),
                 style = MaterialTheme.typography.labelSmall,
             )
         }

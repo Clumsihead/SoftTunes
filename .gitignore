@@ -1,0 +1,32 @@
+# Gradle / Android build output
+.gradle/
+build/
+app/build/
+.cxx/
+.externalNativeBuild/
+captures/
+*.apk
+*.aab
+*.ap_
+*.dex
+output-metadata.json
+
+# Local machine config (contains your SDK path)
+local.properties
+
+# Signing keys: never commit these
+*.jks
+*.keystore
+keystore.properties
+
+# IDEs
+.idea/
+*.iml
+.vscode/
+.DS_Store
+Thumbs.db
+
+# Logs / misc
+*.log
+hs_err_pid*
+*.hprof

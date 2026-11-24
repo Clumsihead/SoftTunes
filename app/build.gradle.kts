@@ -14,16 +14,41 @@ android {
         applicationId = "com.softtunes.player"
         minSdk = 29
         targetSdk = 34
-        versionCode = 1
-        versionName = "1.0"
+        // CI passes these in; locally / in AI Studio the defaults are used.
+        versionCode = System.getenv("APP_VERSION_CODE")?.toIntOrNull() ?: 1
+        versionName = System.getenv("APP_VERSION") ?: "1.0"
         // Chaquopy ships a Python runtime per ABI; keep to the ones phones actually use.
         ndk { abiFilters += listOf("arm64-v8a", "x86_64") }
     }
 
+    // Optional: a stable release key from GitHub secrets, so updates install over older versions.
+    val ciKeystore: String? = System.getenv("KEYSTORE_PATH")
+    signingConfigs {
+        create("ci") {
+            if (ciKeystore != null) {
+                storeFile = file(ciKeystore)
+                storePassword = System.getenv("KEYSTORE_PASSWORD")
+                keyAlias = System.getenv("KEY_ALIAS")
+                keyPassword = System.getenv("KEY_PASSWORD")
+            }
+        }
+    }
+
+    // AI Studio's "Install on Device" ships the DEBUG build, so debug is tuned like release here:
+    // not debuggable (so ART can fully optimise it) + R8 shrinking. This is what fixes the scroll lag.
     buildTypes {
+        debug {
+            isDebuggable = false
+            isMinifyEnabled = true
+            isShrinkResources = true
+            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
+        }
         release {
-            isMinifyEnabled = false
-            signingConfig = signingConfigs.getByName("debug")  // installable without your own keystore
+            isDebuggable = false
+            isMinifyEnabled = true
+            isShrinkResources = true
+            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
+            signingConfig = if (ciKeystore != null) signingConfigs.getByName("ci") else signingConfigs.getByName("debug")
         }
     }
 
@@ -67,4 +92,5 @@ dependencies {
     implementation("androidx.lifecycle:lifecycle-runtime-compose:2.8.6")
     implementation("androidx.documentfile:documentfile:1.0.1")
     implementation("androidx.core:core-ktx:1.13.1")
+    implementation("androidx.profileinstaller:profileinstaller:1.4.1") // applies the AOT profiles Compose/Media3 ship with
 }

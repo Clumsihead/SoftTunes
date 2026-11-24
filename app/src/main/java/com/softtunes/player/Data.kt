@@ -1,5 +1,6 @@
 package com.softtunes.player
 
+import androidx.compose.runtime.Immutable
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
 import androidx.room.*
@@ -7,6 +8,7 @@ import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 import kotlinx.coroutines.flow.Flow
 
+@Immutable
 @Entity(tableName = "songs")
 data class Song(
     @PrimaryKey val uri: String,
@@ -18,6 +20,7 @@ data class Song(
     val dateAdded: Long = 0,
 )
 
+@Immutable
 @Entity(tableName = "playlists")
 data class Playlist(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,

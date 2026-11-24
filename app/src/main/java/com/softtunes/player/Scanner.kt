@@ -51,7 +51,7 @@ object Scanner {
     }
 
     /** Walks a folder the user picked with the system folder picker (SAF). */
-    fun tree(ctx: Context, tree: Uri): List<Song> {
+    fun tree(ctx: Context, tree: Uri, known: Map<String, Song> = emptyMap()): List<Song> {
         val root = DocumentFile.fromTreeUri(ctx, tree) ?: return emptyList()
         val out = mutableListOf<Song>()
         val mmr = MediaMetadataRetriever()
@@ -59,6 +59,8 @@ object Scanner {
         fun walk(dir: DocumentFile) {
             for (f in dir.listFiles()) {
                 if (f.isDirectory) { walk(f); continue }
+                val cached = known[f.uri.toString()]
+                if (cached != null) { out += cached; continue }
                 val name = f.name ?: continue
                 val ext = name.substringAfterLast('.', "").lowercase()
                 if (ext !in audioExt && f.type?.startsWith("audio/") != true) continue
