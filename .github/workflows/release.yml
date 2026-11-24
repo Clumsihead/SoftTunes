@@ -35,10 +35,12 @@ jobs:
         with:
           python-version: "3.11"
 
-      - uses: android-actions/setup-android@v3
-
-      - name: Install Android SDK pieces
-        run: sdkmanager --install "platforms;android-34" "build-tools;34.0.0"
+      # GitHub's ubuntu runners already include the Android SDK (ANDROID_HOME).
+      # Just accept the licences so Gradle can fetch anything it is missing.
+      - name: Accept Android SDK licences
+        run: |
+          SDKM=$(ls -d "$ANDROID_HOME"/cmdline-tools/*/bin/sdkmanager | tail -1)
+          yes | "$SDKM" --licenses > /dev/null || true
 
       # No Gradle wrapper in the repo, so install Gradle directly (AGP 8.5 needs 8.7+).
       - uses: gradle/actions/setup-gradle@v4
