@@ -1,3 +1,6 @@
-# converter.py calls ProgressListener.onProgress reflectively, so R8 must not rename/remove it.
--keep interface com.softtunes.player.ProgressListener { *; }
--keep class * implements com.softtunes.player.ProgressListener { *; }
+# Only used if you turn isMinifyEnabled back on.
+-keep class com.yausername.** { *; }
+-keep class com.fasterxml.jackson.** { *; }
+-dontwarn com.fasterxml.jackson.**
+-dontwarn java.beans.**
+-dontwarn org.w3c.dom.bootstrap.**

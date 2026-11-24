@@ -30,11 +30,6 @@ jobs:
           distribution: temurin
           java-version: "17"
 
-      # Chaquopy needs a matching Python on the build machine to install yt-dlp / av.
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-
       # GitHub's ubuntu runners already include the Android SDK (ANDROID_HOME).
       # Just accept the licences so Gradle can fetch anything it is missing.
       - name: Accept Android SDK licences

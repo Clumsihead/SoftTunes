@@ -3,7 +3,6 @@ plugins {
     id("org.jetbrains.kotlin.android")
     id("org.jetbrains.kotlin.plugin.compose")
     id("com.google.devtools.ksp")
-    id("com.chaquo.python")
 }
 
 android {
@@ -17,7 +16,7 @@ android {
         // CI passes these in; locally / in AI Studio the defaults are used.
         versionCode = System.getenv("APP_VERSION_CODE")?.toIntOrNull() ?: 1
         versionName = System.getenv("APP_VERSION") ?: "1.0"
-        // Chaquopy ships a Python runtime per ABI; keep to the ones phones actually use.
+        // yt-dlp/ffmpeg native libs are per ABI; keep to the ones phones actually use.
         ndk { abiFilters += listOf("arm64-v8a", "x86_64") }
     }
 
@@ -39,18 +38,21 @@ android {
     buildTypes {
         debug {
             isDebuggable = false
-            isMinifyEnabled = true
-            isShrinkResources = true
+            isMinifyEnabled = false
+            isShrinkResources = false
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
         }
         release {
             isDebuggable = false
-            isMinifyEnabled = true
-            isShrinkResources = true
+            isMinifyEnabled = false
+            isShrinkResources = false
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
             signingConfig = if (ciKeystore != null) signingConfigs.getByName("ci") else signingConfigs.getByName("debug")
         }
     }
+
+    // yt-dlp's Python + ffmpeg ship as native libs that must be extracted to disk.
+    packaging { jniLibs { useLegacyPackaging = true } }
 
     buildFeatures { compose = true }
     compileOptions {
@@ -60,16 +62,6 @@ android {
     kotlinOptions {
         jvmTarget = "17"
         freeCompilerArgs += "-opt-in=androidx.media3.common.util.UnstableApi"
-    }
-}
-
-chaquopy {
-    defaultConfig {
-        version = "3.11"
-        pip {
-            install("yt-dlp")   // downloads the audio stream
-            install("av")       // PyAV: bundled FFmpeg, used for the MP3 encode
-        }
     }
 }
 
@@ -92,5 +84,10 @@ dependencies {
     implementation("androidx.lifecycle:lifecycle-runtime-compose:2.8.6")
     implementation("androidx.documentfile:documentfile:1.0.1")
     implementation("androidx.core:core-ktx:1.13.1")
+
+    // YouTube -> MP3: yt-dlp (Python) + FFmpeg with MP3 encoder, prebuilt for Android.
+    val ytdl = "0.18.1"
+    implementation("io.github.junkfood02.youtubedl-android:library:$ytdl")
+    implementation("io.github.junkfood02.youtubedl-android:ffmpeg:$ytdl")
     implementation("androidx.profileinstaller:profileinstaller:1.4.1") // applies the AOT profiles Compose/Media3 ship with
 }

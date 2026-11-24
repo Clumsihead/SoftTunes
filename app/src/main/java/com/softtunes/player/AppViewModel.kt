@@ -17,8 +17,9 @@ import androidx.media3.session.MediaController
 import androidx.media3.session.SessionToken
 import androidx.room.Room
 import androidx.room.withTransaction
-import com.chaquo.python.Python
-import com.chaquo.python.android.AndroidPlatform
+import com.yausername.ffmpeg.FFmpeg
+import com.yausername.youtubedl_android.YoutubeDL
+import com.yausername.youtubedl_android.YoutubeDLRequest
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.*
@@ -44,11 +45,6 @@ data class ConvUi(
     val resultName: String? = null,
     val error: String? = null,
 )
-
-/** Called from Python (converter.py) with download/encode progress. */
-interface ProgressListener {
-    fun onProgress(percent: Double, status: String)
-}
 
 class AppViewModel(app: Application) : AndroidViewModel(app) {
     private val ctx get() = getApplication<Application>()
@@ -192,25 +188,45 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     fun removeFromPlaylist(id: Long, uri: String) = viewModelScope.launch { dao.removeEntry(id, uri) }
 
     // ---- YouTube -> MP3 ----
+    private var ytReady = false
+
     fun convert(url: String, kbps: Int) {
         if (conv.value.running) return
         viewModelScope.launch(Dispatchers.IO) {
-            conv.value = ConvUi(running = true, status = "Starting…")
+            conv.value = ConvUi(running = true, status = "Preparing downloader…")
+            val work = File(ctx.cacheDir, "convert/${System.currentTimeMillis()}").apply { mkdirs() }
             try {
-                val work = File(ctx.cacheDir, "convert").apply { mkdirs() }
-                val cb = object : ProgressListener {
-                    override fun onProgress(percent: Double, status: String) {
-                        conv.update { it.copy(percent = (percent / 100.0).toFloat().coerceIn(0f, 1f), status = status) }
+                if (!ytReady) {
+                    YoutubeDL.getInstance().init(ctx)   // first run unpacks Python + yt-dlp (a few seconds)
+                    FFmpeg.getInstance().init(ctx)
+                    ytReady = true
+                }
+                val request = YoutubeDLRequest(url.trim()).apply {
+                    addOption("--no-playlist")
+                    addOption("-x")
+                    addOption("--audio-format", "mp3")
+                    addOption("--audio-quality", "${kbps}K")
+                    addOption("--embed-metadata")
+                    addOption("--no-mtime")
+                    addOption("-o", "${work.absolutePath}/%(title).120B.%(ext)s")
+                }
+                conv.value = ConvUi(running = true, status = "Downloading audio…")
+                YoutubeDL.getInstance().execute(request, null) { progress, _, line ->
+                    if (line.contains("[ExtractAudio]") || line.contains("[Metadata]")) {
+                        conv.update { it.copy(percent = 0.92f, status = "Converting to MP3…") }
+                    } else if (progress >= 0f) {
+                        conv.update { it.copy(percent = (progress / 100f * 0.85f).coerceIn(0f, 0.85f), status = "Downloading audio…") }
                     }
                 }
-                val path = run { if (!Python.isStarted()) Python.start(AndroidPlatform(ctx)); Python.getInstance() }
-                    .getModule("converter")
-                    .callAttr("convert", url.trim(), work.absolutePath, kbps, cb).toString()
-                val name = saveToMusic(File(path))
+                val mp3 = work.listFiles { f -> f.extension.equals("mp3", ignoreCase = true) }?.firstOrNull()
+                    ?: error("No MP3 was produced. The video may be unavailable, or the downloader may need an update.")
+                val name = saveToMusic(mp3)
                 conv.value = ConvUi(percent = 1f, status = "Saved to Music/SoftTunes", resultName = name)
                 rescan()
             } catch (e: Exception) {
                 conv.value = ConvUi(error = e.message ?: "Conversion failed")
+            } finally {
+                work.deleteRecursively()
             }
         }
     }
